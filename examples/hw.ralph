@@ -1,0 +1,45 @@
+module: hello-world
+copy: s
+
+class <point>(<object>)
+  point-x :: <integer> = 1;
+  point-y :: <integer> = 2;
+end;
+
+def initialize(p :: <point>, #key xx = 0, yy = 0)
+  point-x(p) := xx ;
+  point-y(p) := yy ;
+end;
+
+def $digits = "01234567879ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+def as(type == <string>, arg :: <integer>) => as-string :: <string>;
+  local
+    repeat(arg, digits)
+      let (q,r) = floor/(arg, 10);
+      let digits = pair($digits[as(<integer>, r)], digits);
+      if (zero?(q))
+        as(<string>, digits) ;
+      else
+        repeat(q, digits);
+      end;
+    end;
+  if(negative?(arg))
+    concatenate("-", repeat(-arg, #())) ;
+  else
+    repeat(arg, #()) ;
+  end;
+end;
+
+def show(p :: <point>)
+  puts(as(<string>, point-x(p))) ; puts(",") ;
+  puts(as(<string>, point-y(p))) ; puts(as(<string>, #('a','b'))) ;
+end;
+
+def main(argv0 :: <string>, #rest noise)
+  puts("hello world");
+  let p1 = make(<point>, xx: 12, yy: 13);
+  show(p1);
+  show(make(<point>, xx: 133, yy: 14));
+  3,2
+end;

@@ -1,0 +1,5 @@
+;;; ralph.el -- ralph mode
+
+(define-generic-mode ralph-mode '("//" ("/*" "*/"))
+                     '("def" "class" "module" "library" "if" "select" "case"
+                       "block" "begin" "end"))

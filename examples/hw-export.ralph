@@ -1,0 +1,14 @@
+cop2: 222
+Module: dylan-user
+copy: hello
+
+library hello-world
+  use Dylan;
+end;
+
+module hello-world
+  use dylan;
+  use extensions;
+  use cheap-io;
+end;
+

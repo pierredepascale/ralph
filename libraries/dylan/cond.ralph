@@ -1,0 +1,394 @@
+module: Dylan
+author: William Lott (wlott@cs.cmu.edu)
+rcs-header: $Header: /scm/cvs/src/mindy/libraries/dylan/cond.dylan,v 1.2 2000/01/24 04:58:24 andreas Exp $
+
+//======================================================================
+//
+// Copyright (c) 1994  Carnegie Mellon University
+// Copyright (c) 1998, 1999, 2000  Gwydion Dylan Maintainers
+// All rights reserved.
+// 
+// Use and copying of this software and preparation of derivative
+// works based on this software are permitted, including commercial
+// use, provided that the following conditions are observed:
+// 
+// 1. This copyright notice must be retained in full on any copies
+//    and on appropriate parts of any derivative works.
+// 2. Documentation (paper or online) accompanying any system that
+//    incorporates this software, or any part of it, must acknowledge
+//    the contribution of the Gwydion Project at Carnegie Mellon
+//    University, and the Gwydion Dylan Maintainers.
+// 
+// This software is made available "as is".  Neither the authors nor
+// Carnegie Mellon University make any warranty about the software,
+// its performance, or its conformity to any specification.
+// 
+// Bug reports should be sent to <gd-bugs@gwydiondylan.org>; questions,
+// comments and suggestions are welcome at <gd-hackers@gwydiondylan.org>.
+// Also, see http://www.gwydiondylan.org/ for updates and documentation. 
+//
+//======================================================================
+//
+// This file implements the condition system.
+//
+
+
+// Classes
+
+class <condition> (<object>)
+end;
+
+
+class <serious-condition> (<condition>)
+end;
+
+
+class <error> (<serious-condition>)
+end;
+
+
+class <format-string-condition> (<condition>)
+  condition-format-string; //, required-init-keyword: format-string:;
+  condition-format-arguments = #(); //, init-keyword: format-arguments:,
+end;
+
+
+class <simple-error> (<error>, <format-string-condition>)
+end;
+
+
+class <type-error> (<error>)
+  type-error-value; //, init-keyword: value:;
+  type-error-expected-type; //, init-keyword: type:;
+end;
+
+
+class <warning> (<condition>)
+end;
+
+
+class <simple-warning> (<warning>, <format-string-condition>)
+end;
+
+
+class <restart> (<condition>)
+end;
+
+
+class <simple-restart> (<restart>, <format-string-condition>)
+end;
+
+
+class <abort> (<restart>)
+  abort-description :: <byte-string> = "<abort>";
+//    init-keyword: description:,
+//    init-value: "<abort>";
+end;
+
+
+// Condition reporting.
+
+// condition-format
+//
+// Serves as a firewall between the condition system and streams.
+// Report-condition methods should call this routine to do their formatting
+// and streams libraries should define methods on it to pick off their
+// kinds of streams and call their particular format utility.
+// 
+generic condition-format
+    (stream :: <object>, control-string :: <string>, #rest arguments) => ();
+
+// condition-format(#"cheap-IO") -- internal.
+//
+// Bootstrap method for condition-format that just calls the cheap-IO format
+// to handle everything except %s on condition objects, which are handled
+// directly.
+//
+def condition-format
+    (stream == #"cheap-IO", control-string :: <string>, #rest arguments)
+    => ();
+  let length = control-string.size;
+  local
+    scan (str-start, str-index, args-start, args-index)
+      if (str-index < length)
+	let char = control-string[str-index];
+	if (char == '%')
+	  let next-char = control-string[str-index + 1];
+	  if (next-char == '%')
+	    scan(str-start, str-index + 2, args-start, args-index);
+	  elseif (next-char == 's' | next-char == 'S')
+	    let next-arg = arguments[args-index];
+	    if (instance?(next-arg, <condition>))
+	      apply(format,
+		    copy-sequence
+		      (control-string, start: str-start, end: str-index),
+		    copy-sequence
+		      (arguments, start: args-start, end: args-index));
+	      report-condition(next-arg, stream);
+	      let next-str-index = str-index + 2;
+	      let next-args-index = args-index + 1;
+	      scan(next-str-index, next-str-index,
+		   next-args-index, next-args-index);
+	    else
+	      scan(str-start, str-index + 2, args-start, args-index + 1);
+	    end;
+	  else
+	    scan(str-start, str-index + 2, args-start, args-index + 1);
+	  end;
+	else
+	  scan(str-start, str-index + 1, args-start, args-index);
+	end;
+      else
+	apply(format,
+	      copy-sequence(control-string, start: str-start),
+	      copy-sequence(arguments, start: args-start));
+      end;
+    end;
+  scan(0, 0, 0, 0);
+end;
+
+// condition-force-output
+//
+// Just like condition-format, except performs a general force-output function.
+// 
+generic condition-force-output (stream :: <object>) => ();
+
+// condition-force-output(#"cheap-IO") -- internal.
+//
+// Bootstrap method for condition-format that just calls the cheap-IO fflush.
+//
+def condition-force-output (stream == #"cheap-IO") => ();
+  fflush();
+end;
+
+// report-condition
+//
+// Generate a human readable report of the condition on stream.  We restrict
+// the stream to <object> because we have no idea what the underlying output
+// system is going to use for streams.
+//
+generic report-condition(condition :: <condition>, stream :: <object>) => ();
+
+// report-condition(<condition>) -- exported gf method.
+//
+// Default method for all conditions.  Just print the condition object
+// to the stream.
+// 
+def report-condition (condition :: <condition>, stream) => ();
+  condition-format(stream, "%=", condition);
+end;
+
+def report-condition (condition :: <format-string-condition>, stream)
+    => ();
+  apply(condition-format, stream,
+	condition.condition-format-string,
+	condition.condition-format-arguments);
+end;
+
+
+def report-condition (condition :: <type-error>, stream) => ();
+  condition-format(stream,
+		    "%= is not of type %=",
+		    condition.type-error-value,
+		    condition.type-error-expected-type);
+end;
+
+
+def report-condition (condition :: <abort>, stream) => ();
+  condition-format(stream, "%s", condition.abort-description);
+end;
+
+
+// Condition signaling
+
+def signal (string :: <string>, #rest arguments)
+  signal(make(<simple-warning>,
+	      format-string: string,
+	      format-arguments: arguments));
+end;
+
+
+def signal (cond :: <condition>, #rest noise)
+  unless (empty?(noise))
+    error("Can only supply format arguments when supplying a format string.");
+  end;
+  local
+    search (h)
+      if (h)
+	if (instance?(cond, h.handler-type))
+	  let test = h.handler-test;
+	  if (~test | test(cond))
+	    let remaining = h.handler-next;
+	    h.handler-function(cond, method () search(remaining) end);
+	  else
+	    search(h.handler-next);
+	  end;
+	else
+	  search(h.handler-next);
+	end;
+      else
+	default-handler(cond);
+      end;
+    end;
+  search(current-handler());
+end;
+
+
+def error (string :: <string>, #rest arguments)
+  error(make(<simple-error>,
+	     format-string: string,
+	     format-arguments: arguments));
+end;
+
+
+def error (cond :: <condition>, #rest noise)
+  unless (empty?(noise))
+    error("Can only supply format arguments when supplying a format string.");
+  end;
+  signal(cond);
+  invoke-debugger(make(<simple-error>,
+		       format-string:
+			 "Attempt to return from a call to error"));
+end;
+
+
+def cerror (restart-descr, cond-or-string, #rest arguments)
+  block ()
+    apply(error, cond-or-string, arguments);
+  exception (<simple-restart>,
+	     init-arguments: list(format-string: restart-descr,
+				  format-arguments: arguments))
+    #f;
+  end;
+end;
+
+
+def type-error (value, type)
+  error(make(<type-error>, value: value, type: type));
+end;
+
+
+def check-type (value, type)
+  if (instance?(value, type))
+    value;
+  else
+    type-error(value, type);
+  end;
+end;
+
+def abort ()
+  error(make(<abort>));
+end;
+
+generic default-handler (condition :: <condition>);
+
+def default-handler (condition :: <condition>)
+ => return-val :: singleton(#f);
+  #f;
+end;
+
+
+def default-handler (condition :: <serious-condition>)
+  invoke-debugger(condition);
+end;
+
+
+def *warning-output* = #"Cheap-IO";
+
+def default-handler (condition :: <warning>)
+ => return-val :: singleton(#f);
+  condition-format(*warning-output*, "%s\n", condition);
+  #f;
+end;
+
+
+def default-handler (restart :: <restart>)
+  error("No restart handler for %=", restart);
+end;
+
+
+
+// Breakpoints.
+
+class <breakpoint> (<simple-warning>)
+end;
+
+
+generic return-allowed? (cond :: <condition>)=> answer :: <boolean>;
+
+def return-allowed? (cond :: <breakpoint>) => answer :: <boolean>;
+  #t;
+end;
+
+
+def return-query (cond :: <breakpoint>)
+  #f;
+end;
+
+generic return-description (cond :: <condition>)
+  => descr :: type-union(singleton(#f), <string>, <restart>);
+
+def return-description (cond :: <breakpoint>)
+ => descr :: <string>;
+  "Return #f";
+end;
+
+
+def %break (string :: <string>, #rest arguments)
+  %break(make(<breakpoint>,
+	      format-string: string,
+	      format-arguments: arguments));
+end;
+
+
+def %break (cond :: <condition>, #rest noise)
+  unless (empty?(noise))
+    error("Can only supply format arguments when supplying a format string.");
+  end;
+  block ()
+    invoke-debugger(cond);
+  exception (<simple-restart>,
+	     init-arguments: list(format-string: "Continue from break"))
+    #f;
+  end;
+end;
+
+
+def break (#rest arguments)
+  if (empty?(arguments))
+    %break("Break.");
+  else
+    apply(%break, arguments);
+  end;
+end;
+
+
+
+// Introspection.
+
+def do-handlers (function :: <function>)
+  for (h = current-handler() then h.handler-next,
+       while: h)
+    function(h.handler-type,
+	     h.handler-test | method (x) #t end,
+	     h.handler-function,
+	     h.handler-init-args);
+  end;
+end;
+
+
+def return-allowed? (cond :: <condition>) => answer :: <boolean>;
+  #f;
+end;
+
+
+
+// Interactive handling.
+
+def restart-query (restart :: <restart>)
+  #f;
+end;
+
+
+generic return-query (condition);
+

@@ -1,0 +1,10 @@
+module: dylan
+
+class <hello> ( <object> )
+  myname :: <string> = "" ;
+  doc :: <string> = "" ;
+end;
+
+def aa() => <int>
+  123
+end;

@@ -1,0 +1,22 @@
+#define extern_sym_count 8
+extern void *calloc();
+extern void *malloc();
+extern void *strftime();
+extern void *my_timezone();
+extern void *strlen();
+extern void *my_daylight();
+extern void *strcmp();
+extern void *free();
+
+void init0()
+{
+    add_explicit_symbol("calloc", (void *)&calloc);
+    add_explicit_symbol("malloc", (void *)&malloc);
+    add_explicit_symbol("strftime", (void *)&strftime);
+    add_explicit_symbol("my_timezone", (void *)&my_timezone);
+    add_explicit_symbol("strlen", (void *)&strlen);
+    add_explicit_symbol("my_daylight", (void *)&my_daylight);
+    add_explicit_symbol("strcmp", (void *)&strcmp);
+    add_explicit_symbol("free", (void *)&free);
+}
+
